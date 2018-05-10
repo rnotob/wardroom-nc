@@ -1,5 +1,5 @@
 ---
-kubernetes_version: "{{ kubernetes.version if kubernetes_version_defined else '1.9.3-00' }}"
+kubernetes_version: "{{ kubernetes.version if kubernetes_version_defined else '1.9.7-00' }}"
 kubernetes_cni_version: "{{ kubernetes.cni_version if kubernetes_cni_version_defined else '0.6.0-00' }}"
 kubernetes_enable_cached_images: "{{ kubernetes.enable_cached_images if kubernetes_enable_cached_images_defined else False }}"
 kubernetes_cached_images: "{{ kubernetes.cached_images if kubernetes_cached_images_defined else [] }}"

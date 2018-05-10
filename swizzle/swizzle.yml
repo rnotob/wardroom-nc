@@ -6,7 +6,7 @@
     - ansible-prereqs
 
 - name: install kubernetes prerequisites
-  hosts: all
+  hosts: masters,nodes
   become: yes
   roles:
     - common
@@ -27,7 +27,7 @@
     - etcd
 
 - name: add kube-ucarp-vip static pod
-  hosts: masters:primary_master
+  hosts: masters
   become: yes
   roles:
     - kube-ucarp-vip
@@ -43,7 +43,7 @@
     - kubernetes-master
 
 - name: install CNI
-  hosts: all
+  hosts: masters,nodes
   become: yes
   roles:
     - kubernetes-cni

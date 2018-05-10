@@ -1,4 +1,98 @@
 ---
+- name: download standalone kubeadm for cert generation
+  get_url:
+    url: "{{ kubeadm_release_url }}"
+    dest: /usr/local/bin/kubeadm
+    mode: 0744
+    force: no
+
+- name: create kubernetes etcd pki dirs
+  file:
+    dest: /etc/kubernetes/pki/etcd
+    state: directory
+
+- name: register etcd endpoints fact
+  set_fact:
+    etcd_client_endpoints: "{{ etcd_client_endpoints }}"
+
+- name: determine whether kubeadm needs to create etcd ca
+  stat:
+    path: "/etc/kubernetes/pki/etcd/{{ item }}"
+  with_items:
+    - ca.crt
+    - ca.key
+  register: etcd_ca
+
+- name: determine whether kubeadm needs to create etcd peer and server certs
+  stat:
+    path: "/etc/kubernetes/pki/etcd/{{ item }}"
+  with_items:
+    - peer.crt
+    - peer.key
+    - server.crt
+    - server.key
+  register: etcd_local_tls_assets
+
+- name: determine whether kubeadm needs to create the apiserver etcd client certs
+  stat:
+    path: "/etc/kubernetes/pki/{{ item }}"
+  with_items:
+    - apiserver-etcd-client.crt
+    - apiserver-etcd-client.key
+  register: apiserver_etcd_certs
+  delegate_to: "{{ groups['etcd'][0] }}"
+
+- name: laydown etcd.conf to be used for cert generation
+  template:
+    src: etc/kubernetes/etcd.conf
+    dest: /etc/kubernetes/etcd.conf
+  with_items: "{{ etcd_ca.results }}"
+  when: item.stat.exists == False
+
+- name: generate etcd ca certs with kubeadm alpha phase certs etcd-ca
+  shell: "/usr/local/bin/kubeadm alpha phase certs etcd-ca"
+  delegate_to: "{{ groups['etcd'][0] }}"
+  run_once: True
+  with_items: "{{ etcd_ca.results }}"
+  when: item.stat.exists == False
+
+- name: generate apiserver client certs with kubeadm alpha phase certs apiserver-etcd-client
+  shell: "/usr/local/bin/kubeadm alpha phase certs apiserver-etcd-client"
+  delegate_to: "{{ groups['etcd'][0] }}"
+  run_once: True
+  with_items: "{{ apiserver_etcd_certs.results }}"
+  when: item.stat.exists == False
+
+- name: slurp the etcd ca certs
+  slurp: src=/etc/kubernetes/pki/etcd/{{ item }}
+  with_items:
+    - ca.crt
+    - ca.key
+  register: etcd_ca_pki
+  delegate_to: "{{ groups['etcd'][0] }}"
+  run_once: True
+
+- name: add etcd ca cert to the rest of the etcd nodes
+  no_log: True
+  copy:
+    dest: "{{ item.source }}"
+    content: "{{ item.content | b64decode }}"
+    owner: root
+    group: root
+    mode: 0700
+  with_items: "{{ etcd_ca_pki.results }}"
+  when: inventory_hostname != groups['etcd']|first
+
+- name: generate etcd peer certs with kubeadm alpha phase certs etcd-peer
+  shell: "/usr/local/bin/kubeadm alpha phase certs etcd-peer --config=/etc/kubernetes/etcd.conf"
+  with_items: "{{ etcd_local_tls_assets.results }}"
+  when: item.stat.exists == False
+
+- name: generate etcd server certs with kubeadm alpha phase certs etcd-server
+  shell: "/usr/local/bin/kubeadm alpha phase certs etcd-server --config=/etc/kubernetes/etcd.conf"
+  with_items: "{{ etcd_local_tls_assets.results }}"
+  when: item.stat.exists == False
+
 - name: download and extract etcd binaries
   unarchive:
     remote_src: True
@@ -6,7 +100,7 @@
     dest: /tmp
     creates: /usr/local/bin/etcd
 
-- name: move binaries into path
+- name: move etcd binaries into path
   copy:
     remote_src: True
     src: "/tmp/etcd-{{ etcd.version }}-linux-amd64/{{ item }}"

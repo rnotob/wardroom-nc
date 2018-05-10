@@ -1,9 +1,16 @@
 ---
+# TODO: check for node cert instead of kube-proxy.
 - name: check whether we have joined this node
   shell: "/usr/bin/docker ps | /bin/grep kube-proxy"
   register: kube_proxy_running
   ignore_errors: True
 
+- name: systemctl daemon-reload
+  systemd:
+    name: kubelet
+    daemon_reload: true
+    state: restarted
+
 - name: join nodes to masters
-  command: "/usr/bin/kubeadm join {{ kubernetes_common.api_ip }}:6443 --token='{{ hostvars[groups['primary_master'][0]]['generated_token']['stdout'] }}' --discovery-token-unsafe-skip-ca-verification"
+  command: "/usr/bin/kubeadm join {{ kubernetes_common.api_ip }}:6443 --token='{{ hostvars[groups['masters'][0]]['generated_token']['stdout'] }}' --discovery-token-unsafe-skip-ca-verification"
   when: kube_proxy_running|failed

@@ -76,18 +76,19 @@ def generate_inventory(node_state={}):
         return temporary inventory file path """
     inventory = {
         "etcd": [],
-        "primary_master": [],
         "masters": [],
         "nodes": [],
     }
-    for node, state in node_state.items():
+    for node, state in sorted(node_state.items()):
         if state == "running":
-            if node.startswith('master'):
-                inventory["masters"].append(node)
+            if node.startswith("etcd"):
                 inventory["etcd"].append(node)
             elif node.startswith("node"):
                 inventory["nodes"].append(node)
-    inventory['primary_master'] = [random.choice(inventory['masters'])]
+            elif node.startswith("master"):
+                inventory["masters"].append(node)
+    if len(inventory["etcd"]) == 0:
+       inventory["etcd"] = inventory["masters"]
 
     parser = ConfigParser.ConfigParser(allow_no_value=True)
     for key, vals in inventory.items():
